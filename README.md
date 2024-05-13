@@ -1,11 +1,11 @@
-# Uniswap V2
+# Uniswap V2 Analysis
 
-[![Actions Status](https://github.com/Uniswap/uniswap-v2-core/workflows/CI/badge.svg)](https://github.com/Uniswap/uniswap-v2-core/actions)
-[![Version](https://img.shields.io/npm/v/@uniswap/v2-core)](https://www.npmjs.com/package/@uniswap/v2-core)
+## Summary
 
-In-depth documentation on Uniswap V2 is available at [uniswap.org](https://uniswap.org/docs).
+This warehouse is mainly used to analyze the source code of Uniswap V2.
+> 本仓库主要用于分析 Uniswap V2 的源码。
 
-The built contract artifacts can be browsed via [unpkg.com](https://unpkg.com/browse/@uniswap/v2-core@latest/).
+code source address: https://github.com/Uniswap/v2-core
 
 # Local Development
 
