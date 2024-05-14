@@ -38,7 +38,7 @@ interface IUniswapV2Factory {
 // File: @uniswap/lib/contracts/libraries/TransferHelper.sol
 
 // helper methods for interacting with ERC20 tokens and sending ETH that do not consistently return true/false
-library TransferHelper {
+library TransferHelper { 
     function safeApprove(
         address token,
         address to,
@@ -261,7 +261,7 @@ library UniswapV2Library {
      * @param tokenB TokenB
      * @return pair  pair合约地址
      */
-    // calculates the CREATE2 address for a pair without making any external calls
+    // calculates  the CREATE2 address for a pair without making any external calls
     function pairFor(
         address factory,
         address tokenA,
@@ -269,7 +269,7 @@ library UniswapV2Library {
     ) internal pure returns (address pair) {
         //排序token地址
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        //根据排序的token地址计算create2的pair地址
+        //根据排序的token地址计算create2的pair地址(可以参考这个代码获取用 create2 创建的合约的地址)
         pair = address(
             uint256(
                 keccak256(
@@ -359,7 +359,7 @@ library UniswapV2Library {
             reserveIn > 0 && reserveOut > 0,
             "UniswapV2Library: INSUFFICIENT_LIQUIDITY"
         );
-        //税后输入数额 = 输入数额 * 997
+        //税后输入数额 = 输入数额 * 997 ==> 由于没有小数，先乘以 997 再做除法（收取千分之三的手续费 ）
         uint256 amountInWithFee = amountIn.mul(997);
         //分子 = 税后输入数额 * 储备量Out
         uint256 numerator = amountInWithFee.mul(reserveOut);
@@ -370,7 +370,7 @@ library UniswapV2Library {
     }
 
     /**
-     * @dev 获取单个输出数额
+     * @dev 获取单个输入数额
      * @notice 给定一项资产的输出量和对储备，返回其他资产的所需输入量
      * @param amountOut 输出数额
      * @param reserveIn 储备量In
@@ -451,7 +451,7 @@ library UniswapV2Library {
         amounts = new uint256[](path.length);
         //数额数组最后一个元素 = 输出数额
         amounts[amounts.length - 1] = amountOut;
-        //从倒数第二个元素倒叙遍历路径数组
+        //从倒数第二个元素倒叙遍历路径数组（确定精确的输出，是从后往前进行不断交换）
         for (uint256 i = path.length - 1; i > 0; i--) {
             //(储备量In,储备量Out) = 获取储备(上一个路径地址,当前路径地址)
             (uint256 reserveIn, uint256 reserveOut) = getReserves(
@@ -465,9 +465,57 @@ library UniswapV2Library {
     }
 }
 
+
+// File: contracts/interfaces/IERC20.sol
+
+interface IERC20 {
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+}
+
+// File: contracts/interfaces/IWETH.sol
+
+interface IWETH {
+    function deposit() external payable;
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function withdraw(uint256) external;
+}
+
+
 // File: contracts/interfaces/IUniswapV2Router01.sol
 
-interface IUniswapV2Router01 {
+interface IUniswapV2Router01 { 
     function factory() external pure returns (address);
 
     function WETH() external pure returns (address);
@@ -626,52 +674,6 @@ interface IUniswapV2Router01 {
         returns (uint256[] memory amounts);
 }
 
-// File: contracts/interfaces/IERC20.sol
-
-interface IERC20 {
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
-    event Transfer(address indexed from, address indexed to, uint256 value);
-
-    function name() external view returns (string memory);
-
-    function symbol() external view returns (string memory);
-
-    function decimals() external view returns (uint8);
-
-    function totalSupply() external view returns (uint256);
-
-    function balanceOf(address owner) external view returns (uint256);
-
-    function allowance(address owner, address spender)
-        external
-        view
-        returns (uint256);
-
-    function approve(address spender, uint256 value) external returns (bool);
-
-    function transfer(address to, uint256 value) external returns (bool);
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 value
-    ) external returns (bool);
-}
-
-// File: contracts/interfaces/IWETH.sol
-
-interface IWETH {
-    function deposit() external payable;
-
-    function transfer(address to, uint256 value) external returns (bool);
-
-    function withdraw(uint256) external;
-}
-
 // File: contracts/UniswapV2Router01.sol
 
 contract UniswapV2Router01 is IUniswapV2Router01 {
@@ -686,6 +688,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     //构造函数:传入工厂地址和weth地址
+    // _WETH：包装后的 ETH 
     constructor(address _factory, address _WETH) public {
         factory = _factory;
         WETH = _WETH;
@@ -699,7 +702,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
 
     // **** ADD LIQUIDITY ****
     /**
-     * @dev 添加流动性的私有方法
+     * @dev 添加流动性的私有方法：这里仅仅是做了计算，并没有真正添加流动性 
      * @param tokenA tokenA地址
      * @param tokenB tokenB地址
      * @param amountADesired 期望数量A
@@ -728,12 +731,12 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             tokenA,
             tokenB
         );
-        //如果储备reserve{A,B}==0
+        //如果储备reserve{A,B}==0，说明是刚被创建出来的 
         if (reserveA == 0 && reserveB == 0) {
-            //数量amount{A,B} = 期望数量A,B
+            //数量amount{A,B} = 期望数量A,B （因为刚被创建出来，池子里还没有，所以就等于期望的数值 ）
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
-            //最优数量B = 期望数量A * 储备B / 储备A
+            //最优数量B = 期望数量A * 储备B / 储备A 
             uint256 amountBOptimal = UniswapV2Library.quote(
                 amountADesired,
                 reserveA,
@@ -776,7 +779,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
      * @param amountBDesired 期望数量B
      * @param amountAMin 最小数量A
      * @param amountBMin 最小数量B
-     * @param to to地址
+     * @param to to地址（即配对合约中铸造函数中的to  地址）
      * @param deadline 最后期限
      * @return amountA   数量A
      * @return amountB   数量B
@@ -853,7 +856,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             token,
             WETH,
             amountTokenDesired,
-            msg.value,
+            msg.value,// 就是期望的 ETH 数量
             amountTokenMin,
             amountETHMin
         );
@@ -869,7 +872,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         liquidity = IUniswapV2Pair(pair).mint(to);
         //如果`收到的主币数量`>`ETH数量` 则返还`收到的主币数量`-`ETH数量`
         if (msg.value > amountETH)
-            TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH); // refund dust eth, if any
+            TransferHelper.safeTrans ferETH(msg.sender, msg.value - amountETH); // refund dust eth, if any
     }
 
     // **** REMOVE LIQUIDITY ****
@@ -928,7 +931,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
      * @return amountToken   token数量
      * @return amountETH   ETH数量
      */
-    function removeLiquidityETH(
+     function removeLiquidityETH(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
@@ -948,8 +951,8 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         );
         //将token数量的token发送到to地址
         TransferHelper.safeTransfer(token, to, amountToken);
-        //从WETH取款ETH数量
-        IWETH(WETH).withdraw(amountETH);
+        //从WETH取款ETH数量到路由合约
+        IWETH(WETH).withdraw(amountETH); //这个IWETH合约内部的 msg.sender 是当前路由合约，先取款到当前路由合约，再把钱转给 to 地址 
         //将ETH数量的ETH发送到to地址
         TransferHelper.safeTransferETH(to, amountETH);
     }
@@ -1084,11 +1087,12 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
             //输出数量 = 数额数组下一个数额
             uint256 amountOut = amounts[i + 1];
             //(输出数额0,输出数额1) = 输入地址==token0 ? (0,输出数额) : (输出数额,0)
+            // 因为 swap 每一个交易对中只取一个输出金额，只需要一个输出金额做计算，另一个取 0
             (uint256 amount0Out, uint256 amount1Out) = input == token0
                 ? (uint256(0), amountOut)
                 : (amountOut, uint256(0));
             //to地址 = i<路径长度-2 ? (输出地址,路径下下个地址)的pair合约地址 : to地址
-            address to = i < path.length - 2
+            address to = i < path.length - 2 
                 ? UniswapV2Library.pairFor(factory, output, path[i + 2])
                 : _to;
             //调用(输入地址,输出地址)的pair合约地址的交换方法(输出数额0,输出数额1,to地址,0x00)
@@ -1124,17 +1128,17 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
-            UniswapV2Library.pairFor(factory, path[0], path[1]),
+            UniswapV2Library.pairFor(factory, path[0], path[1]), // 就是第一个token和第二个的配对合约的地址
             amounts[0]
         );
-        //私有交换(数额数组,路径数组,to地址)
+        //私有交换(数额数组,路径数组,to地址)==>循环处理，直到最终的数额发送到 to 地址
         _swap(amounts, path, to);
     }
 
     /**
      * @dev 使用尽量少的token交换精确的token
      * @param amountOut 精确输出数额
-     * @param amountInMax 最大输入数额
+     * @param amountInMax 最大输入数额（简单理解就是用户 愿意付出的最大成本）
      * @param path 路径数组
      * @param to to地址
      * @param deadline 最后期限
@@ -1152,7 +1156,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
         //确认数额数组第一个元素<=最大输入数额
         require(
             amounts[0] <= amountInMax,
-            "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "UniswapV2Router: EXCESSIVE_INPUT_ AMOUNT"
         );
         //将数量为数额数组[0]的路径[0]的token从调用者账户发送到路径0,1的pair合约
         TransferHelper.safeTransferFrom(
@@ -1166,7 +1170,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     /**
-     * @dev 根据精确的ETH交换尽量多的token
+     * @dev 根据精确的ETH交换尽量多的token（先存款后交换：注意和“使用尽量少的token交换精确的ETH”的区别）
      * @param amountOutMin 最小输出数额
      * @param path 路径数组
      * @param to to地址
@@ -1202,7 +1206,7 @@ contract UniswapV2Router01 is IUniswapV2Router01 {
     }
 
     /**
-     * @dev 使用尽量少的token交换精确的ETH
+     * @dev 使用尽量少的token交换精确的ETH（先交换后取款：注意和“根据精确的ETH交换尽量多的token ”的区别）
      * @param amountOut 精确输出数额
      * @param amountInMax 最大输入数额
      * @param path 路径数组
