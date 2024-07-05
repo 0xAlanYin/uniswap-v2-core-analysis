@@ -22,9 +22,11 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     address public token0; //token0地址/
     address public token1; //token1地址
 
+    // 下面 3 个值存储在一个 slot 里，节省了存储
     uint112 private reserve0; // 储备量0
     uint112 private reserve1; // 储备量1
     uint32 private blockTimestampLast; // 更新储备量的最后时间戳
+
     //价格0最后累计
     uint256 public price0CumulativeLast;
     //价格1最后累计
@@ -178,8 +180,10 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
                 //如果rootK>rootKLast
                 if (rootK > rootKLast) {
                     //分子 = erc20总量 * (rootK - rootKLast)
+                    // 对应白皮书中的公式（7） 分子 = (sqrt(k2) - sqrt(k1)) * s1
                     uint256 numerator = totalSupply.mul(rootK.sub(rootKLast));
                     //分母 = rootK * 5 + rootKLast
+                    // 对应白皮书中的公式（7） 分母 = 5*sqrt(k2) - sqrt(k1)
                     uint256 denominator = rootK.mul(5).add(rootKLast);
                     //流动性 = 分子 / 分母
                     uint256 liquidity = numerator / denominator;
@@ -325,7 +329,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
             //如果data的长度大于0 调用to地址的接口
             if (data.length > 0) {
                 // 这里的 to 必须是合约地址，并且要实现 IUniswapV2Callee 接口：这里的 msg.sender 是路由合约
-                // 其实这一步就是闪电贷的功能
+                // 其实这一步就是闪电贷的功能： address to 实现了 IUniswapV2Callee 接口
                 IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
             }
             //`余额0,1` = 当前合约在`token0,1`合约内的余额
@@ -381,6 +385,6 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
      */
     // force reserves to match balances
     function sync() external lock {
-        _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
+        _x(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
     }
 }
