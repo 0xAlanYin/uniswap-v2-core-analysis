@@ -24,6 +24,7 @@ contract ExampleOracleSimple {
     FixedPoint.uq112x112 public price1Average;
 
     constructor(address factory, address tokenA, address tokenB) public {
+        // 获取交易对合约地址
         IUniswapV2Pair _pair = IUniswapV2Pair(UniswapV2Library.pairFor(factory, tokenA, tokenB));
         pair = _pair;
         token0 = _pair.token0();
@@ -42,6 +43,7 @@ contract ExampleOracleSimple {
         uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
 
         // ensure that at least one full period has passed since the last update
+        // 必须按照预先设置的时间间隔更新（此处可以根据不同的需求自行调整间隔）
         require(timeElapsed >= PERIOD, "ExampleOracleSimple: PERIOD_NOT_ELAPSED");
 
         // overflow is desired, casting never truncates
@@ -55,7 +57,8 @@ contract ExampleOracleSimple {
     }
 
     // note this will always return 0 before update has been called successfully for the first time.
-    // 计算金额数
+    // 计算金额数：根据记录的平均价格计算给定数量的代币（token）相对于另一个代币中的价值
+    // 例如  ETH/DAI 交易对， price0Average: 0.02 DAI/ETH（即每个 ETH 值 0.02 DAI），price1Average: 50 ETH/DAI（即每个 DAI 值 50 ETH）
     function consult(address token, uint256 amountIn) external view returns (uint256 amountOut) {
         if (token == token0) {
             amountOut = price0Average.mul(amountIn).decode144();

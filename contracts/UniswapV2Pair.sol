@@ -12,17 +12,17 @@ import "./interfaces/IUniswapV2Callee.sol";
 contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     using SafeMath for uint256;
     using UQ112x112 for uint224;
-    //最小流动性 = 1000
 
+    //最小流动性 = 1000
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
     //SELECTOR常量值为'transfer(address,uint256)'字符串哈希值的前4位16进制数字
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes("transfer(address,uint256)")));
 
     address public factory; //工厂地址
-    address public token0; //token0地址/
+    address public token0; //token0地址
     address public token1; //token1地址
 
-    // 下面 3 个值存储在一个 slot 里，节省了存储
+    // 小技巧：下面 3 个值存储在一个 slot 里，节省了存储
     uint112 private reserve0; // 储备量0
     uint112 private reserve1; // 储备量1
     uint32 private blockTimestampLast; // 更新储备量的最后时间戳
@@ -33,9 +33,9 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     uint256 public price1CumulativeLast;
 
     //在最近一次流动性事件之后的K值
-    //储备量0*储备量1，自最近一次流动性事件发生后
+    //储备量0*储备量1，自最近一次流动性事件发生后的 k 值
     uint256 public kLast;
-    //锁定变量,防止重入
+    //锁定变量,防止重入攻击
     uint256 private unlocked = 1;
 
     //事件:铸造
@@ -77,7 +77,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     /**
      * @param _token0 token0
      * @param _token1 token1
-     * @dev 初始化方法,部署时由工厂调用一次
+     * @dev 初始化方法,在使用 create2 部署后，由工厂调用一次
      */
     function initialize(address _token0, address _token1) external {
         //确认调用者为工厂地址
@@ -165,7 +165,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     function _mintFee(uint112 _reserve0, uint112 _reserve1) private returns (bool feeOn) {
         //查询工厂合约的feeTo变量值
         address feeTo = IUniswapV2Factory(factory).feeTo();
-        //如果feeTo不等于0地址,feeOn等于true否则为false
+        //如果feeTo不等于0地址（说明设置了手续费收取）,feeOn等于true否则为false
         feeOn = feeTo != address(0);
         //定义k值
         uint256 _kLast = kLast; // gas savings
@@ -173,7 +173,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         if (feeOn) {
             //如果k值不等于0
             if (_kLast != 0) {
-                //计算(_reserve0*_reserve1)的平方根
+                //计算(_reserve0*_reserve1)的平方根: k 开根号
                 uint256 rootK = Math.sqrt(uint256(_reserve0).mul(_reserve1));
                 //计算k值的平方根
                 uint256 rootKLast = Math.sqrt(_kLast);
@@ -206,11 +206,11 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
      */
     // this low-level function should be called from a contract which performs important safety checks
     function mint(address to) external lock returns (uint256 liquidity) {
-        //获取`储备量0`,`储备量1`
+        //获取`储备量0`,`储备量1`：这个值是之前交易中积累的
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         //获取当前合约在token0合约内的余额
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
-        //获取当前合约在token1合约内的余额
+        //获取当前合约在token1合约内的余额：这个余额包含了储备量 + 最近因为添加流动性而增加的代币数量
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
         //amount0 = 余额0 - 储备0
         uint256 amount0 = balance0.sub(_reserve0);
@@ -219,17 +219,22 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 
         //返回铸造费开关
         bool feeOn = _mintFee(_reserve0, _reserve1);
-        //获取totalSupply,必须在此处定义，因为totalSupply可以在mintFee中更新
+        //获取totalSupply,必须在此处定义，因为totalSupply的值可能在mintFee中被更新了
         uint256 _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
-        //如果_totalSupply等于0
+        //如果_totalSupply等于0，说明是交易对第一次添加流动性
         if (_totalSupply == 0) {
             //流动性 = (数量0 * 数量1)的平方根 - 最小流动性1000
             liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
             //在总量为0的初始状态,永久锁定最低流动性
             _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
-            //流动性 = 最小值 (amount0 * _totalSupply / _reserve0) 和 (amount1 * _totalSupply / _reserve1)
+            //流动性 = 取 (amount0 * _totalSupply / _reserve0) 和 (amount1 * _totalSupply / _reserve1) 的更小值
+            // amount0 * _totalSupply / _reserve0：表示新增的 token0 数量在总供应量中的比例。用于计算出新增的 token0 对应的流动性代币数量。
             liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
+            // 前置知识：添加流动性时，需要确保新加入的流动性与现有流动性比例相同，以保持池子的平衡
+            // 为了确保池子的平衡，实际分配的流动性代币数量需要取这两个计算结果的最小值。原因如下：
+            //确保了在添加流动性时，用户获得的流动性代币数量与他们添加的 token0 和 token1 数量成比例，并且不会超出实际添加量的任何一种代币。
+            //通过取最小值，保持了流动性池的平衡，防止了单一代币的过度分配。
         }
         //确认流动性 > 0
         require(liquidity > 0, "UniswapV2: INSUFFICIENT_LIQUIDITY_MINTED");
@@ -256,13 +261,14 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         //获取`储备量0`,`储备量1`
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         //带入变量
-        address _token0 = token0; // gas savings
+        address _token0 = token0; // gas savings：因为本函数中需要多次用到 token0，使用临时变量无需反复从存储中加载，节省 gas 费
         address _token1 = token1; // gas savings
         //获取当前合约在token0合约内的余额
         uint256 balance0 = IERC20(_token0).balanceOf(address(this));
         //获取当前合约在token1合约内的余额
         uint256 balance1 = IERC20(_token1).balanceOf(address(this));
-        //从当前合约的balanceOf映射中获取当前合约自身的流动性数量
+        // 从当前合约的balanceOf映射中获取当前合约自身的流动性数量
+        //这里这么做的原因是：移除流动性时，用户先把 LPToken 转给 Pair 合约，再销毁转给 Pair 合约的 LPToken，然后给用户转相应的 token0 和 token1
         uint256 liquidity = balanceOf[address(this)];
 
         //返回铸造费开关
@@ -308,7 +314,7 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         require(amount0Out > 0 || amount1Out > 0, "UniswapV2: INSUFFICIENT_OUTPUT_AMOUNT");
         //获取`储备量0`,`储备量1`
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
-        //确认`输出数量0 ,1` < `储备量0,1`
+        //确认`输出数量0 ,1` < `储备量0,1`，不能超量交换
         require(amount0Out < _reserve0 && amount1Out < _reserve1, "UniswapV2: INSUFFICIENT_LIQUIDITY");
 
         //初始化变量
@@ -337,7 +343,10 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
             balance1 = IERC20(_token1).balanceOf(address(this));
         }
         //如果 余额0 > 储备0 - amount0Out 则 amount0In = 余额0 - (储备0 - amount0Out) 否则 amount0In = 0
-        // 简单而言：这里是利用 储备量-输出量(_reserve0 - amount0Out)  从而算出输入的量是多少
+        // 简单而言：这里是利用 储备量-输出量(_reserve0 - amount0Out)，从而算出输入的量是多少
+        //解释：计算池中预期剩余的 token0 数量 _reserve0 - amount0Out，即扣除掉已经发送给 to 的 amount0Out 后的数量。
+        //检查当前余额 balance0 是否大于预期余额 _reserve0 - amount0Out，如果大于，说明有新的 token0 进入池中，进入池中的数量为 balance0 - (_reserve0 - amount0Out)；
+        // 否则，没有新的 token0 进入池中，amount0In 为 0。
         uint256 amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
         //如果 余额1 > 储备1 - amount1Out 则 amount1In = 余额1 - (储备1 - amount1Out) 否则 amount1In = 0
         uint256 amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
@@ -347,13 +356,15 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         {
             //标记reserve{0,1}的作用域，避免堆栈太深的错误
             // scope for reserve{0,1}Adjusted, avoids stack too deep errors
+
             //调整后的余额0 = 余额0 * 1000 - (amount0In * 3)
+            // 详细解释：1.balance0 是交易后的 token0 余额；2.amount0In 是进入池中的 token0 数量；3.balance0Adjusted 是调整后的 token0 余额
             uint256 balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(3));
             //调整后的余额1 = 余额1 * 1000 - (amount1In * 3)
             uint256 balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(3));
-            //确认balance0Adjusted * balance1Adjusted >= 储备0 * 储备1 * 1000000
+            //确认 balance0Adjusted * balance1Adjusted >= 储备0 * 储备1 * 1000000
             // ==> 这里 储备0 * 储备1 即为 x*y
-            // ==> 这里校验的核心目的是表示收过税了（0.3%），以防止绕过路由合约直接调当前合约做 swap(这样就收不到税)
+            // ==> 核心目的是校验收过税了（0.3%），以防止绕过路由合约直接调当前合约做 swap(这样就收不到税)
             require(
                 balance0Adjusted.mul(balance1Adjusted) >= uint256(_reserve0).mul(_reserve1).mul(1000 ** 2),
                 "UniswapV2: K"
@@ -369,6 +380,8 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     /**
      * @param to to地址
      * @dev 强制平衡以匹配储备：按照储备量去匹配余额
+     * 作用：是将多余的 token0 和 token1 从合约中转移到指定的地址 to。这种多余的代币可能由于意外或故意转移而存在。它是一种清理机制，确保合约中只保留必要的储备量。
+     * 用于清理意外或多余的代币，确保合约中的代币数量准确无误。它在意外转账、流动性调整以及复杂交易后的清算等场景中非常有用。通过将多余的代币转移到指定地址，skim 函数维护了合约的清晰性和准确性。
      */
     // force balances to match reserves
     function skim(address to) external lock {
@@ -382,9 +395,11 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 
     /**
      * @dev 强制准备金与余额匹配：按照余额去匹配储备量
+     *  作用是同步储备量，以确保合约的内部状态与实际持有的代币数量一致。这在处理意外转账、状态不一致修复以及复杂操作后的状态恢复等场景中非常有用。
+     *  通过调用 sync 函数，可以手动触发储备量更新，确保合约的操作准确无误。
      */
     // force reserves to match balances
     function sync() external lock {
-        _x(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
+        _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
     }
 }

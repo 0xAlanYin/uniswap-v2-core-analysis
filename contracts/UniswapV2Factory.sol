@@ -6,8 +6,8 @@ import {IUniswapV2Pair} from "./interfaces/IUniswapV2Pair.sol";
 
 // Uniswap 工厂合约
 contract UniswapV2Factory is IUniswapV2Factory {
-    address public feeTo; // 收税人的地址
-    address public feeToSetter; //收税人的设置者
+    address public feeTo; // 手续费接收者的地址
+    address public feeToSetter; //手续费接收者的设置者
 
     mapping(address => mapping(address => address)) public getPair; // 配对的映射地址 address => address => address
     address[] public allPairs; // 所有的配对地址
@@ -63,8 +63,8 @@ contract UniswapV2Factory is IUniswapV2Factory {
     }
 
     /**
-     * @notice 设置收税人地址
-     * @param _feeTo 收税人地址
+     * @notice 设置手续费接收者的地址
+     * @param _feeTo 手续费接收者地址
      */
     function setFeeTo(address _feeTo) external {
         require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
@@ -72,8 +72,8 @@ contract UniswapV2Factory is IUniswapV2Factory {
     }
 
     /**
-     * @notice 设置收税人设置者地址
-     * @param _feeToSetter 收税人设置者地址
+     * @notice 设置手续费接收者的设置者地址
+     * @param _feeToSetter 手续费接收者设置者地址
      */
     function setFeeToSetter(address _feeToSetter) external {
         require(msg.sender == feeToSetter, "UniswapV2: FORBIDDEN");
